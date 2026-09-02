@@ -1,8 +1,3 @@
----
-
-**终极版 install.sh 代码**
-
-```bash
 #!/usr/bin/env bash
 set -e
 

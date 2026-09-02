@@ -1,8 +1,13 @@
+---
+
+**终极版 install.sh 代码**
+
+```bash
 #!/usr/bin/env bash
 set -e
 
 echo "======================================================="
-echo "  VPN Gate 终极满血版 (无限制+真测速+TG双层菜单+防死锁)"
+echo "  VPN Gate 终极版 (Systemd/OpenRC自适应 + 路由镜像)"
 echo "======================================================="
 
 if [ "$EUID" -ne 0 ]; then
@@ -10,27 +15,45 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo "[*] 1/6 安装系统依赖..."
-if [ -f /etc/debian_version ]; then
+echo "[*] 1/7 进行 TUN/TAP 硬件环境校验..."
+if [ ! -c /dev/net/tun ]; then
+    echo "[!] 致命错误: TUN/TAP 模块未开启 (/dev/net/tun 不存在)。"
+    echo "    请前往 VPS/LXC 服务商控制面板开启 TUN/TAP 支持，并重启机器后重试。"
+    exit 1
+fi
+
+echo "[*] 2/7 安装系统依赖包 (自适应 Alpine/Debian/RedHat)..."
+if [ -f /etc/alpine-release ]; then
+    apk update > /dev/null
+    apk add bash curl python3 openvpn iproute2 procps > /dev/null
+elif [ -f /etc/debian_version ]; then
     apt-get update -y > /dev/null
     apt-get install -y curl python3 openvpn iproute2 procps > /dev/null
 elif [ -f /etc/redhat-release ]; then
     yum install -y curl python3 openvpn iproute procps-ng > /dev/null
 fi
 
-echo "[*] 2/6 嗅探内核网络环境..."
-MAIN_DEV=$(ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | head -n1)
-MAIN_IP=$(ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)
-MAIN_GW=$(ip route show default | grep "$MAIN_DEV" | awk '{print $3}' | head -n1)
-if [ -z "$MAIN_GW" ]; then
-    MAIN_GW=$(ip -4 route show dev "$MAIN_DEV" | grep -v default | awk '{print $1}' | head -n1 | sed 's/0\/[0-9]*/1/')
+echo "[*] 3/7 探测 Init 系统守护进程..."
+if command -v systemctl >/dev/null 2>&1; then
+    INIT_SYS="systemd"
+    echo "[-] 识别到 Systemd (Debian/Ubuntu/CentOS)"
+elif command -v rc-service >/dev/null 2>&1; then
+    INIT_SYS="openrc"
+    echo "[-] 识别到 OpenRC (Alpine Linux)"
+else
+    echo "[!] 未知守护进程系统，安装中止。"
+    exit 1
 fi
-MAIN_SUBNET=$(ip -4 route show dev "$MAIN_DEV" | grep -v default | awk '{print $1}' | head -n1)
+
+echo "[*] 4/7 初始化基线 IP 配置与禁用 IPv6..."
+LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)
+PUBLIC_IP=$(curl -s --max-time 5 http://ip-api.com/json | grep -o '"query":"[^"]*"' | cut -d'"' -f4)
+if [ -z "$PUBLIC_IP" ]; then PUBLIC_IP=$LOCAL_IP; fi
 
 mkdir -p /etc/vpngate
-echo "$MAIN_IP" > /etc/vpngate/main_ip.txt
+echo "$PUBLIC_IP" > /etc/vpngate/main_ip.txt
 
-echo "[*] 3/6 彻底禁用 IPv6..."
+MAIN_DEV=$(ip -4 route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | head -n1)
 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
 sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1 || true
@@ -44,23 +67,32 @@ net.ipv6.conf.lo.disable_ipv6 = 1
 EOF
 sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1 || true
 
-echo "[*] 4/6 配置入站防断网策略路由..."
-cat << EOF > /usr/local/bin/vps-inbound-protect.sh
+echo "[*] 5/7 注入「原生路由镜像克隆」防断网核心..."
+cat << 'EOF' > /usr/local/bin/vps-inbound-protect.sh
 #!/usr/bin/env bash
-sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1
-sysctl -w net.ipv4.conf.$MAIN_DEV.rp_filter=0 >/dev/null 2>&1
-sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1
-ip rule del from $MAIN_IP table 200 2>/dev/null || true
-ip route flush table 200
-if [ -n "$MAIN_SUBNET" ]; then
-    ip route add $MAIN_SUBNET dev $MAIN_DEV src$MAIN_IP table 200 2>/dev/null || true
-fi
-ip route add default via $MAIN_GW dev$MAIN_DEV onlink table 200
-ip rule add from $MAIN_IP pref 100 table 200
+LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)
+MAIN_DEV=$(ip -4 route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | head -n1)
+sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1 || true
+sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1 || true
+if [ -n "$MAIN_DEV" ]; then sysctl -w net.ipv4.conf.$MAIN_DEV.rp_filter=0 >/dev/null 2>&1 || true; fi
+ip rule del from $LOCAL_IP table 200 2>/dev/null || true
+ip route flush table 200 2>/dev/null || true
+ip -4 route show table main | grep -E -v 'tun|vpn|ppp' | while read -r route; do
+    ip route add $route table 200 2>/dev/null || true
+done
+ip rule add from $LOCAL_IP pref 100 table 200 2>/dev/null || true
 EOF
 chmod +x /usr/local/bin/vps-inbound-protect.sh
 
-cat << 'EOF' > /etc/systemd/system/vps-inbound-protect.service
+echo "[*] 6/7 自动生成系统守护进程配置 ($INIT_SYS)..."
+echo -e "vpn\nvpn" > /etc/vpngate/auth.txt
+chmod 600 /etc/vpngate/auth.txt
+if [ ! -f /etc/vpngate/settings.json ]; then
+    echo '{"interval": 60, "daemon_enabled": false, "target_ip": "", "country": "JP", "tg_token": "", "tg_chat_id": "", "filter_softether": true}' > /etc/vpngate/settings.json
+fi
+
+if [ "$INIT_SYS" = "systemd" ]; then
+    cat << 'EOF' > /etc/systemd/system/vps-inbound-protect.service
 [Unit]
 Description=Protect VPS Inbound Routing for VPN Gate
 After=network.target
@@ -71,17 +103,7 @@ ExecStart=/usr/local/bin/vps-inbound-protect.sh
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl enable --now vps-inbound-protect.service
-
-echo "[*] 5/6 初始化认证与系统服务..."
-echo -e "vpn\nvpn" > /etc/vpngate/auth.txt
-chmod 600 /etc/vpngate/auth.txt
-if [ ! -f /etc/vpngate/settings.json ]; then
-    echo '{"interval": 60, "daemon_enabled": false, "target_ip": "", "country": "JP", "tg_token": "", "tg_chat_id": "", "filter_softether": true}' > /etc/vpngate/settings.json
-fi
-
-cat << 'EOF' > /etc/systemd/system/vpngate.service
+    cat << 'EOF' > /etc/systemd/system/vpngate.service
 [Unit]
 Description=VPN Gate Global Egress
 After=network.target vps-inbound-protect.service
@@ -92,8 +114,7 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-
-cat << 'EOF' > /etc/systemd/system/vpngate-daemon.service
+    cat << 'EOF' > /etc/systemd/system/vpngate-daemon.service
 [Unit]
 Description=VPN Gate TG Bot & Auto-Heal Daemon
 After=network.target
@@ -105,10 +126,35 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl enable --now vpngate-daemon.service
+elif [ "$INIT_SYS" = "openrc" ]; then
+    cat << 'EOF' > /etc/init.d/vps-inbound-protect
+#!/sbin/openrc-run
+description="Protect VPS Inbound Routing for VPN Gate"
+depend() { after network; }
+start() { ebegin "Starting routing protection"; /usr/local/bin/vps-inbound-protect.sh; eend $?; }
+EOF
+    cat << 'EOF' > /etc/init.d/vpngate
+#!/sbin/openrc-run
+description="VPN Gate Global Egress"
+command="/usr/sbin/openvpn"
+command_args="--config /etc/vpngate/current.ovpn"
+command_background="yes"
+pidfile="/run/vpngate.pid"
+depend() { after net vps-inbound-protect; }
+EOF
+    cat << 'EOF' > /etc/init.d/vpngate-daemon
+#!/sbin/openrc-run
+description="VPN Gate TG Bot & Auto-Heal Daemon"
+command="/usr/local/bin/vpngate"
+command_args="daemon"
+command_background="yes"
+pidfile="/run/vpngate-daemon.pid"
+depend() { after net; }
+EOF
+    chmod +x /etc/init.d/vps-inbound-protect /etc/init.d/vpngate /etc/init.d/vpngate-daemon
+fi
 
-echo "[*] 6/6 生成核心 Python 管理内核..."
+echo "[*] 7/7 编译写入 Python 全栈管理内核..."
 cat << 'EOF' > /usr/local/bin/vpngate
 #!/usr/bin/env python3
 import urllib.request
@@ -145,6 +191,12 @@ def load_settings():
 
 def save_settings(settings):
     with open(SETTINGS_FILE, "w") as f: json.dump(settings, f)
+
+def svc_cmd(action, srv):
+    if os.path.exists("/sbin/rc-service"):
+        subprocess.run(["rc-service", srv, action], check=False)
+    else:
+        subprocess.run(["systemctl", action, srv], check=False)
 
 def tcp_ping(ip, port, timeout=1.5):
     try:
@@ -377,7 +429,7 @@ def handle_telegram_updates():
                             with open(TG_CACHE_FILE, "r") as f: cached_nodes = json.load(f)
                             if 0 <= idx < len(cached_nodes):
                                 send_tg_message(f"[*] 正在后台连接节点 `{idx+1}` ...")
-                                subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+                                svc_cmd("stop", "vpngate")
                                 time.sleep(1)
                                 success = False
                                 for node in cached_nodes[idx:]:
@@ -389,7 +441,7 @@ def handle_telegram_updates():
                         
                     if callback_data == "tg_dial":
                         send_tg_message(f"[*] 正在后台并发测速智能拨号...")
-                        subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+                        svc_cmd("stop", "vpngate")
                         time.sleep(1)
                         auto_dial(settings.get("country", "JP"))
                     elif callback_data == "tg_manual":
@@ -400,16 +452,16 @@ def handle_telegram_updates():
                             send_tg_message(f"[!] 未能测通任何 `{cc}` 节点。")
                         else:
                             with open(TG_CACHE_FILE, "w") as f: json.dump(nodes[:25], f)
-                            lines = [f"🌍 *{cc} 节点列表 (真实Ping排序)*", "```text"]
+                            lines = [f"🌍 *{cc} 节点列表 (Ping优先)*", "```text"]
                             for i, n in enumerate(nodes[:25]):
-                                loc = n['region'][:8]
-                                op = n['operator'][:12]
-                                lines.append(f"[{i+1:<2}] {n['ping']:<3.0f}ms | {loc:<8} | {op}")
+                                loc = n['region'][:6]
+                                op = n['operator'][:10]
+                                lines.append(f"[{i+1:<2}] {n['ping']:<3.0f}ms | {n['speed']:>4.0f}M | {loc} | {op}")
                             lines.append("```")
                             msg = "\n".join(lines) + "\n\n👉 **请直接回复指令拨号，例如：** `/dial 1`"
                             send_tg_message(msg)
                     elif callback_data == "tg_stop":
-                        subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+                        svc_cmd("stop", "vpngate")
                         settings['target_ip'] = ""; save_settings(settings)
                         send_tg_message("[√] 已停止代理，恢复本机出口。")
                     elif callback_data == "tg_status":
@@ -436,7 +488,9 @@ def handle_telegram_updates():
 def dial_and_verify(node):
     print(f"[-] 正在拨号: {node['ip']} (TCPing: {node['ping']:.1f}ms)...")
     write_config(node)
-    subprocess.run(["systemctl", "restart", "vpngate"], check=False)
+    
+    subprocess.run(["/usr/local/bin/vps-inbound-protect.sh"], check=False)
+    svc_cmd("restart", "vpngate")
     
     for i in range(6):
         time.sleep(3)
@@ -450,7 +504,7 @@ def dial_and_verify(node):
             return True
             
     print(f"[!] {node['ip']} 连接超时或出站IP仍为本机，立即切断！")
-    subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+    svc_cmd("stop", "vpngate")
     time.sleep(1)
     return False
 
@@ -475,7 +529,7 @@ def daemon_process():
             
             if not curr_ip or curr_ip == main_ip or (target_ip and curr_ip != target_ip):
                 print(f"[{time.strftime('%H:%M:%S')}] IP 异常，切断死链并启动 [{target_country}] 自动重连...")
-                subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+                svc_cmd("stop", "vpngate")
                 time.sleep(2)
                 auto_dial(target_country)
                 
@@ -531,28 +585,28 @@ def main_menu():
         c = input("请选择操作 [0-5]: ").strip()
         
         if c == '1': 
-            subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+            svc_cmd("stop", "vpngate")
             time.sleep(1)
             auto_dial(curr_cc)
         elif c == '2':
-            subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+            svc_cmd("stop", "vpngate")
             print(f"[-] 正在全量并发 TCPing 测速并解析 [{curr_cc}] 的地理位置，请稍候...")
             nodes = fetch_nodes(curr_cc, get_asn=True)
             if not nodes:
                 print(f"[!] 未能测通任何 [{curr_cc}] 节点。")
                 continue
             print(f"\n================ [{curr_cc}] 节点列表 (共 {len(nodes)} 个可用) ================")
-            print(f" {'ID':<3} | {'IP 地址':<15} | {'Ping':<5} | {'地区 (Region)':<14} | {'真实 ASN / ISP'}")
-            print("------------------------------------------------------------------------------------------")
+            print(f" {'ID':<3} | {'IP 地址':<15} | {'Ping':<5} | {'带宽':<5} | {'地区 (Region)':<13} | {'真实 ASN / ISP'}")
+            print("------------------------------------------------------------------------------------------------")
             for i, n in enumerate(nodes):
-                print(f" [{i+1:<2}] | {n['ip']:<15} | {n['ping']:<4.0f} | {n['region']:<16} | {n['operator']}")
-            print("==========================================================================================")
+                print(f" [{i+1:<2}] | {n['ip']:<15} | {n['ping']:<4.0f} | {n['speed']:>4.0f}M | {n['region']:<14} | {n['operator']}")
+            print("================================================================================================")
             sel = input(f"\n请选择起始节点 ID [1-{len(nodes)} | 0 返回]: ").strip()
             if sel.isdigit() and 1 <= int(sel) <= len(nodes):
                 for node in nodes[int(sel)-1:]:
                     if dial_and_verify(node): break
         elif c == '3':
-            subprocess.run(["systemctl", "stop", "vpngate"], check=False)
+            svc_cmd("stop", "vpngate")
             s['target_ip'] = ""; save_settings(s)
             print("[√] 已断开代理，恢复直连。")
         elif c == '4':
@@ -567,8 +621,17 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "daemon": daemon_process()
     else: main_menu()
 EOF
-
 chmod +x /usr/local/bin/vpngate
-systemctl daemon-reload
-systemctl restart vpngate-daemon.service
-echo "[√] 所有升级与修复应用完成。请去 TG 发送 /start 体验新菜单！"
+
+if [ "$INIT_SYS" = "systemd" ]; then
+    systemctl daemon-reload
+    systemctl enable --now vps-inbound-protect.service
+    systemctl restart vpngate-daemon.service
+elif [ "$INIT_SYS" = "openrc" ]; then
+    rc-update add vps-inbound-protect default >/dev/null 2>&1 || true
+    rc-update add vpngate-daemon default >/dev/null 2>&1 || true
+    rc-service vps-inbound-protect start >/dev/null 2>&1 || true
+    rc-service vpngate-daemon restart >/dev/null 2>&1 || true
+fi
+
+echo "[√] 部署完毕！适配引擎已启动。请运行 vpngate 体验无缝穿越！"

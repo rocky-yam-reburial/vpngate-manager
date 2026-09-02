@@ -1,3 +1,6 @@
+Markdown
+
+
 # VPNGate Supernode Manager 🛡️
 
 专为 Linux VPS 打造的 **VPN Gate 智能出口管理框架**。整合真实连接测速、策略路由防断网、ASN 级清洗与 Telegram 远程交互。
@@ -11,3 +14,10 @@
 * **后台守护进程**：掉线或出口 IP 异常时自动熔断并重选最优节点。
 
 ## 快速安装
+
+bash
+wget -O install.sh <你的RAW链接> && bash install.sh
+
+
+
+部署完成后，终端输入 `vpngate` 即可呼出管理面板。

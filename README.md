@@ -9,40 +9,43 @@
 
 ## 🌟 核心特性
 
-* **🛡️ S/A/B/C 原生风控体检评级**
-  * 拒绝粗糙的文本关键词匹配，直读 **IPQS (`connection_type`)**、**IPinfo (`asn.type`)** 与 **ip-api (`hosting`)** 原生类型字段，精准识别原生家庭住宅宽带（Residential）与机房（Data Center）。
-  * 并发反查 **5 大国际反滥用黑名单（Spamhaus ZEN / Barracuda / DroneBL / SpamCop / SORBS）**。
-  * 结合 **AbuseIPDB 涉案举报历史** 与 **IPQS 商业欺诈分**，输出绿色 S 级（绝品住宅）、蓝色 A 级（优质中继）、黄色 B 级（及格）与红色 C 级（高危劣质）动态评级。
+- **🛡️ S/A/B/C 原生风控体检评级**
+  - 拒绝粗糙的文本关键词匹配，直读 **IPQS (`connection_type`)**、**IPinfo (`asn.type`)** 与 **ip-api (`hosting`)** 原生类型字段，精准识别原生家庭住宅宽带（Residential）与机房（Data Center）。
+  - 并发反查 **5 大国际反滥用黑名单（Spamhaus ZEN / Barracuda / DroneBL / SpamCop / SORBS）**。
+  - 结合 **AbuseIPDB 涉案举报历史** 与 **IPQS 商业欺诈分**，输出绿色 S 级（绝品住宅）、蓝色 A 级（优质中继）、黄色 B 级（及格）与红色 C 级（高危劣质）动态评级。
 
-* **⚡ 智能双模分离架构**
-  * **自动通道（后台保活）**：零交互、零 API 消耗。系统开机或网络断流瞬间，0 秒等待直接按全网并发 TCPing 延迟秒连可用出口，保障网络可用性。
-  * **人工通道（交互决策）**：通过控制面板选定节点时，可按需即时调用风控雷达，人工择优挑选原生家宽。
+- **⚡ 智能双模分离架构**
+  - **自动通道（后台保活）**：零交互、零 API 消耗。系统开机或网络断流瞬间，0 秒等待直接按全网并发 TCPing 延迟秒连可用出口，保障网络可用性。
+  - **人工通道（交互决策）**：通过控制面板选定节点时，可按需即时调用风控雷达，人工择优挑选原生家宽。
 
-* **🔄 双重看门狗守护自愈 (Watchdog)**
-  * **第一重（Systemd / OpenRC 进程锁）**：进程级异常崩溃 3 秒内原地拉起。
-  * **第二重（Crontab 独立哨兵）**：系统底层每分钟巡检，即便守护进程被外部意外强杀，亦能自动复活。
+- **🔄 双重看门狗守护自愈 (Watchdog)**
+  - **第一重（Systemd / OpenRC 进程锁）**：进程级异常崩溃 3 秒内原地拉起。
+  - **第二重（Crontab 独立哨兵）**：系统底层每分钟巡检，即便守护进程被外部意外强杀，亦能自动复活。
 
-* **🌐 双重防断网路由隔离 (Anti-Deadlock Routing)**
-  * 采用 `iptables CONNMARK` 连接追踪标记与 `ip rule (table 200)` 双保险，回程流量原路返回，彻底根除更改默认网关导致 SSH 离线的风险。
+- **🌐 双重防断网路由隔离 (Anti-Deadlock Routing)**
+  - 采用 `iptables CONNMARK` 连接追踪标记与 `ip rule (table 200)` 双保险，回程流量原路返回，彻底根除更改默认网关导致 SSH 离线的风险。
 
-* **🔒 纯 IPv4 固化与 DNS 物理锁死**
-  * 彻底冲刷物理网卡残留 IPv6 地址，消除路由泄漏；硬编码公共安全 DNS（1.1.1.1 / 8.8.8.8）并执行系统只读锁定，切断内网 DNS 劫持。
+- **🔒 纯 IPv4 固化与 DNS 物理锁死**
+  - 彻底冲刷物理网卡残留 IPv6 地址，消除路由泄漏；硬编码公共安全 DNS（1.1.1.1 / 8.8.8.8）并执行系统只读锁定，切断内网 DNS 劫持。
 
 ---
 
 ## ⚙️ 一键极速部署
 
 ### 系统要求
-* **操作系统**：Debian / Ubuntu / CentOS / Alpine Linux
-* **运行权限**：Root 权限
-* **虚拟化要求**：VPS 需支持并开启 TUN/TAP 模块
+- **操作系统**：Debian / Ubuntu / CentOS / Alpine Linux
+- **运行权限**：Root 权限
+- **虚拟化要求**：VPS 需支持并开启 TUN/TAP 模块
 
 ### 部署命令
-> **提示**：安装流程包含交互式 API 凭据配置，请直接复制完整单行命令（将命令中的 `YOUR_GITHUB_USERNAME` 替换为你的真实 GitHub 用户名）：
+在终端执行以下单行命令（已去除任何嵌套超链接语法）：
 
 ```bash
 wget -qO /tmp/install.sh [https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
+若在国内服务器拉取 GitHub 超时，可走加速镜像：
 
+Bash
+wget -qO /tmp/install.sh [https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
 🎮 控制面板功能指南
 部署完成后，在任意终端输入以下命令启动交互控制台：
 

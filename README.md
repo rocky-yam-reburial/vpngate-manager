@@ -59,15 +59,13 @@
 在终端执行以下单行命令：
 
 ```bash
-wget -qO /tmp/install.sh [https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
-
+wget -qO /tmp/install.sh https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh && bash /tmp/install.sh && rm -f /tmp/install.sh
 ```
 
 若在国内服务器拉取 GitHub 超时，可走加速镜像：
 
 ```bash
-wget -qO /tmp/install.sh [https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
-
+wget -qO /tmp/install.sh https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh && bash /tmp/install.sh && rm -f /tmp/install.sh
 ```
 
 ---

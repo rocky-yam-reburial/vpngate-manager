@@ -1,3 +1,21 @@
+从截图看，格式错乱是由两个具体原因导致的：
+
+1. **代码块没有闭合（缺少 ```）**：部署命令的代码块开头写了 ```，但结尾漏掉了闭合的三个反引号，导致下面的说明文字、“🎮 控制面板功能指南”标题、甚至 `vpngate` 命令全被吞进了同一个灰色代码框里。
+
+
+2. **命令里混入了 Markdown 超链接语法**：命令中的链接被写成了 `[url](url)` 格式，不仅页面看起来怪异，而且复制到终端运行时会报 `unexpected "("` 语法错误。
+
+
+
+---
+
+### 彻底修复步骤
+
+1. 打开 GitHub 仓库，点击 `README.md` 右侧的 **铅笔图标（Edit this file）**。
+2. 按 **Ctrl + A**（Mac 上为 **Cmd + A**）全选当前内容，按 **Delete/Backspace** 全部清空。
+3. 完整复制下方代码框中的纯净 Markdown 文本并粘贴进去：
+
+```markdown
 # VPNGate Supernode Manager 🛡️ (v1.0 最终版)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -38,59 +56,66 @@
 - **虚拟化要求**：VPS 需支持并开启 TUN/TAP 模块
 
 ### 部署命令
-在终端执行以下单行命令（已去除任何嵌套超链接语法）：
+在终端执行以下单行命令：
 
 ```bash
 wget -qO /tmp/install.sh [https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
+
+```
+
 若在国内服务器拉取 GitHub 超时，可走加速镜像：
 
-Bash
+```bash
 wget -qO /tmp/install.sh [https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh](https://ghproxy.net/https://raw.githubusercontent.com/rocky-yam-reburial/vpngate-manager/main/install.sh) && bash /tmp/install.sh && rm -f /tmp/install.sh
-🎮 控制面板功能指南
+
+```
+
+---
+
+## 🎮 控制面板功能指南
+
 部署完成后，在任意终端输入以下命令启动交互控制台：
 
-Bash
+```bash
 vpngate
-菜单选项详解
-1. 自动智能拨号
 
+```
+
+### 菜单选项详解
+
+* **`1. 自动智能拨号`**
 执行全量节点并发测速，跳过繁琐体检，毫秒级快速接入延迟最低的最佳出口，适合应急快速通网。
-
-2. 手动选择节点
-
+* **`2. 手动选择节点`**
 展示当前目标国家的节点明细（含 Ping 值、带宽、物理城市与真实 ASN）。选定节点后，可选择是否进行 S/A/B/C 评级体检，供人工挑选优质住宅出口。
-
-3. 停止连接
-
+* **`3. 停止连接`**
 立即断开 OpenVPN 隧道，冲刷路由并安全恢复 VPS 本地物理网络出口，同时挂起后台看门狗（防止系统反复重新拨号）。
-
-4. 查看当前网络真实状态
-
+* **`4. 查看当前网络真实状态`**
 实时回显出站 IP、所在地理位置及真实运营商 ASN 广播归属，确认当前流量是否处于代理保护中。
-
-5. 系统与设置
-
+* **`5. 系统与设置`**
 包含多项核心运维开关：
+1. 切换目标国家代号（如 `JP`、`US`、`HK`）
+2. 开关后台双重看门狗与开机自愈
+3. 开关官方/学术拥挤节点过滤
+4. 修改守护巡检周期频率
+5. 配置或更新 AbuseIPDB、IPQS 与 IPinfo API 密钥
+6. 一键自检与重拉守护服务
 
-切换目标国家代号（如 JP、US、HK）
 
-开关后台双重看门狗与开机自愈
-
-开关官方/学术拥挤节点过滤
-
-修改守护巡检周期频率
-
-配置或更新 AbuseIPDB、IPQS 与 IPinfo API 密钥
-
-一键自检与重拉守护服务
-
-6. 🛡️ IP 专业风控与滥用黑名单体检
-
+* **`6. 🛡️ IP 专业风控与滥用黑名单体检`**
 针对当前出口 IP 执行全维度诊断：包含 5 大国际反滥用黑名单（Spamhaus、Barracuda、DroneBL、SpamCop、SORBS）反查、AbuseIPDB 90 天涉案举报次数、IPQS 欺诈风险值以及原生 Residential/Data Center 属性认定。
-
-0. 退出面板
-
+* **`0. 退出面板`**
 安全关闭控制界面，后台守护服务与 VPN 隧道保持正常运行。
 
-📄 开源许可证
-本项目基于 MIT License 协议开源。
+---
+
+## 📄 开源许可证
+
+本项目基于 [MIT License](https://www.google.com/search?q=LICENSE) 协议开源。
+
+```
+
+4. 滑动至页面最下方，点击绿色按钮 **Commit changes...** 提交保存。
+
+**验证标准**：保存后刷新仓库首页，两个 `wget` 命令将分别独占一个紧凑的黑色代码框，“🎮 控制面板功能指南”恢复为标准加粗大标题，下方菜单项整齐排布，不再有任何文字被错误包裹进代码块中[cite: 2]。
+
+```
